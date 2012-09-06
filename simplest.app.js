@@ -11,6 +11,8 @@ var server = http.createServer(app);
 //server.listen(gameport);
 var sio = io.listen(server);
 
+var players = [];
+
 server.listen(gameport);
 
 //app.listen(gameport);
@@ -40,17 +42,32 @@ sio.configure(function(){
 
 sio.sockets.on('connection',function(client){
 	client.userid = UUID();
-
+	client.gameid = -1;
 	client.emit('onconnected',{ id: client.userid });
 	
-	console.log('\t socket.io:: player ' + client.userid + 'connected');
+	players.push(client);
+	
+	console.log('\t socket.io:: player ' + client.userid + ' connected');
 
 	client.on('disconnect', function(){
 		console.log('\t socket.io:: client disconnected ' + client.userid);
+		if (players.indexOf(client) >= 0){
+			players.splice(players.indexOf(client), 1);
+		}
 	});
 	
-	client.on('ball_update',function(data){
-		console.log('\t socket.io:: ball x: '+data.ball.x+' y: '+data.ball.y);
-});
+	if (players.length%2 == 1){
+		//in pair
+		client.gameid = UUID();
+		players[players.indexOf(client)-1].gameid = client.gameid;
+		client.emit("gameStart",{ gid: client.gameid, player:1, opponent:players[players.indexOf(client)-1].userid });
+		players[players.indexOf(client)-1].emit("gameStart",{ gid: client.gameid, player:0, opponent:client.userid });
+		client.on('ball_update',function(data){
+			//console.log('\t socket.io:: ball x: '+data.ball.x+' y: '+data.ball.y);
+			//player1 is owning rightOfServe. passing to player0 (with ball_updated event)
+			players[players.indexOf(client)-1].emit('ball_updated',{data:data});
+		});
+	}
+	
 });
 
