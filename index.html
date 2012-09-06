@@ -1,0 +1,375 @@
+<!-- 
+	Version: Beta Sweater Pehno
+	Author: That's Sir Author Conan Doyle (The number of puns with that name is just a mind blow.)
+	License: GPLv3
+
+    This program is not free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. I also lie a lot.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details. I WILL FUCK YOU UP.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <http://www.gnu.org/licenses/>.
+    
+    Il also send you our swiss bank account number if you want to transfer lots of money into that. Thanks! -->
+ 
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Pong</title>
+        <meta charset="UTF-8">
+        <meta name=author content="Ankkit Modi & Paper Li">
+        <link rel="shortcut icon" href="favicon.ico"/>
+        <link rel="stylesheet" type="text/css" href="main.css" media="screen">
+		<link href='http://fonts.googleapis.com/css?family=Didact+Gothic' rel='stylesheet' type='text/css'>
+		<script type="text/javascript" src="http://localhost:4004/socket.io/socket.io.js"></script>
+
+<script>
+var ctx;
+var canvas;
+var gameObjects = [];
+var score = [];
+var scoreBoard = [];
+var collisionSound;
+var scoreSound;
+var speed = 1;
+var sound = true;
+var paused = true;
+var first = true;
+var display;
+var pauseButton;
+var end = false;
+var soundButton;
+var board;
+var container;
+// player info:
+// player 0: left board; 1:right board
+// player0 owns the right of serve when hit the ball on left side, vice versa
+var player = 0;
+var rightOfServe = true;
+
+// connect to server
+var socket = io.connect('http://localhost:4004');
+	socket.on("onconnected",function(data){
+	console.log('Connected successfully to the socket.io server. My server side ID is '+ data.id);
+	init();
+	//setInterval(game,1000);
+});
+
+
+function init() {
+	//register ball listener from server
+	socket.on('ball_move',function(data){
+		
+	});
+	//Declaring the variables
+    canvas = document.getElementById('pongCanvas');
+	ctx = canvas.getContext('2d');
+    container = document.getElementById('container');
+	collisionSound = document.getElementById('collision');
+	scoreSound = document.getElementById('point');
+	scoreBoard[0] = document.getElementById('playerOneScore');
+	scoreBoard[1] = document.getElementById('playerTwoScore');
+	board = document.getElementById('scoreboard');
+	display = document.getElementById('display');
+	soundButton = document.getElementById('soundButton');
+    pauseButton = document.getElementById('pauseButton');
+	var playButton = document.getElementById('playButton');
+	//turning sound on or off
+	soundButton.onclick = function (){
+		if(sound){
+			sound = false;
+			this.innerHTML = "Sound-Off";
+		}else{
+			sound = true;
+			this.innerHTML = "Sound-On";
+		}
+	}
+//Pausing the game.
+	pauseButton.onclick = function (){
+		if(paused){
+			paused = false;
+			this.innerHTML = "Pause";
+			display.innerHTML = '';
+            document.documentElement.style.overflow = 'hidden'; //disable scrolling
+            container.style.paddingRight = '30px';
+		}else{
+			paused = true;
+			this.innerHTML = "Play!";
+			display.innerHTML = 'PAUSED';
+            document.documentElement.style.overflow = 'scroll'; //enable scrolling
+            container.style.paddingRight = '15px';
+		}
+	}
+//For menu and options.
+	playButton.onclick = function (){
+		paused = false;
+		display.innerHTML = '';
+		pauseButton.innerHTML = 'Pause';
+		soundButton.innerHTML = 'Sound-On';
+		gameObjects[0].x = canvas.width/2
+		gameObjects[0].y = canvas.height/2;
+		gameObjects[0].directionY = 0;
+		first = false;
+		document.getElementById('wrapper').style.paddingBottom = '0px';
+		board.style.display = 'block';
+        document.documentElement.style.overflow = 'hidden'; //disable scrolling
+        container.style.paddingRight = '30px';
+	}
+//Assignign keyboard to control the paddle. For both players. Keys are 81=q 65=a 38=up arrow key 40=down arrow key.
+    document.onkeydown = function keyboardController(e){
+        if(!e){e = window.event;}
+        switch(e.keyCode){
+            case 81: gameObjects[1].dy = -2;
+            //w
+                break;
+            case 65: gameObjects[1].dy = 2;
+            //s
+                break;
+            case 38: gameObjects[2].dy = -2;
+            //up
+                break;
+            case 40: gameObjects[2].dy = 2;
+            //down
+                break;
+        }
+    }
+//Assignign keyboard to control the paddle. For both players. Keys are 81=q 65=a 38=up arrow key 40=down arrow key.
+    document.onkeyup = function keyboardController(e){
+        if(!e){e = window.event;}
+        switch(e.keyCode){
+            case 81: gameObjects[1].dy = 0;
+                break;
+            case 65: gameObjects[1].dy = 0;
+                break;
+            case 38: gameObjects[2].dy = 0;
+                break;
+            case 40: gameObjects[2].dy = 0;
+                break;
+        }
+    }
+
+	ctx.font = '555px 8-bit';
+	score[0] = 0;
+	score[1] = 0;
+    gameObjects[0] = new Ball(canvas.width/2-6, canvas.height/2 , 8, "#f8ce4c");
+    gameObjects[1] = new Paddle(8, 0, 0, "#f12772");
+	gameObjects[2] = new Paddle(8, canvas.width-4, 0, "#f12772");
+    return setInterval(game, 10);
+}
+
+function Ball(x, y, size, color){
+    this.x = x;
+    this.y = y;
+    this.size = size;
+    this.directionX = 1;
+    this.directionY = 1;
+	this.color = color;
+// drawing ball
+    this.draw = function(){
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, size, size);
+    }
+    // this.collision is when the ball collides and detects direction and also reaction to paddle to make sound. The speed also increses by 1. 
+    this.collision = function(side){
+        switch(side){
+            case 'left':
+                if((this.y + this.size) >= gameObjects[1].y &&
+                    this.y <= gameObjects[1].y + gameObjects[1].height)
+                {
+					sound && collisionSound.play();
+                    this.directionX *= -1;
+					speed++;
+				    if(gameObjects[1].dy < 0){
+						this.directionY = 1;
+				    }else if(gameObjects[1].dy > 0){
+						this.directionY = -1;
+					}else{
+						this.directionY = 0;
+					}
+                }else{
+					sound && scoreSound.play();
+                    this.directionX = 1;
+				    this.directionY = 0;
+					updateScore(1);
+					speed = 2;
+                    this.x = canvas.width/2;
+                }
+                break;
+            case 'right':
+                if((this.y + this.size) >= gameObjects[2].y &&
+                   this.y <= gameObjects[2].y + gameObjects[2].height)
+                {
+					sound && collisionSound.play();
+                    this.directionX *= -1;
+					speed++;
+					if(gameObjects[2].dy < 0 ){
+						this.directionY = 1;
+				    }else if(gameObjects[2].dy > 0){
+						this.directionY = -1;
+					}else{
+						this.directionY = 0;
+					}
+                }else{
+					sound && scoreSound.play();
+                    this.directionX = -1;
+					this.directionY = 0;
+					updateScore(0);
+					speed = 2;
+                    this.x = canvas.width/2;
+                }
+                break;
+			case 'side':
+				sound && collisionSound.play();
+				this.directionY *= -1;
+			break;
+        }
+    }
+
+    this.move = function(){
+		this.x += speed*this.directionX;
+		this.y += speed*this.directionY;
+		if(this.x >= canvas.width-(gameObjects[2].size*2)){
+			// detect collision: right paddle
+			this.collision('right');
+		}
+		if(this.x <= 0){
+			// detect collision: left paddle
+			this.collision('left');
+		}
+		if(this.y <= 0 || this.y >= canvas.height-gameObjects[0].size){
+			// detect collision: side wall
+			this.collision('side');
+		}
+    }
+ //animation is controlled by speed? because the paddle response gets faster as the ball gains speed.
+	this.animate = function(){
+		this.x += speed*this.directionX;
+		this.y += speed*this.directionY;
+		if(this.x >= (canvas.width-(gameObjects[2].size*2)) ||
+			this.x <= 0){
+			this.directionX *= -1;
+		}
+		if(this.y <= 0 || this.y >= canvas.height-gameObjects[0].size){
+			this.directionY *= -1;
+		}
+	}
+}
+//Paddle colour and giving function. 
+function Paddle(size, x, y, color){
+    this.size = size/2;
+    this.height = size*10;
+    this.x = x;
+    this.y = y;
+    this.dy = 0;
+	this.color = color;
+
+    this.draw = function(){
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.height);
+    }
+
+    this.move = function(){
+		if(this.y + this.dy >= 0 && this.y + this.dy <= canvas.height-this.height){
+			this.y += this.dy*(speed/2);
+		}else{
+			if(this.y + this.dy <= 0){
+				this.y = 0;
+			}else{
+				this.y = canvas.height-this.height;
+			}
+		}
+	}
+}
+
+function game (){
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+	ctx.beginPath();
+	
+	
+	if (rightOfServe){
+	// player owns right of serve
+	if (paused == false){
+		for(var i=0; i< gameObjects.length; i++){
+			gameObjects[i].move();
+			gameObjects[i].draw();
+		}
+	}else{
+		if(first){
+			gameObjects[0].animate();
+			gameObjects[0].draw();
+		}else if(end != true && paused){
+			for(var i=0; i< gameObjects.length; i++){
+				gameObjects[i].draw();
+			}
+		}
+	}
+	
+	// update ball obj to server
+	socket.emit('ball_update',{ball:gameObjects[0],paddle1:gameObjects[1],paddle2:gameObjects[2]});
+	} else {
+		// opposite owns right of serve
+		
+	}
+}
+//Updating the score
+function updateScore(player){
+	score[player]++;
+	scoreBoard[player].innerHTML = score[player];
+}
+//Restoring game and starting ball from default speed.
+function restoreGame(){
+	end = false;
+	paused = false;
+	display.innerHTML = '';
+	pauseButton.innerHTML = 'Pause';
+	soundButton.innerHTML = 'Sound-On';
+	gameObjects[0].x = canvas.width/2
+	gameObjects[0].y = canvas.height/2;
+	gameObjects[1].y = 0;
+	gameObjects[2].y = 0;
+	gameObjects[0].directionY = 0;
+	first = false;
+	score[0] = 0;
+	score[1] = 0;
+	scoreBoard[0].innerHTML = '0';
+	scoreBoard[1].innerHTML = '0';
+}
+
+//document.onload = connect();
+</script>
+      </head>
+    <body>
+        <div id="top-bar"></div>
+        <div id="container">
+            <article>
+    
+    <div id="wrapper">
+	<div id="display">
+		<h3>Pong</h3>
+		<p class="green">Avoid missing ball for high score.<br>Use Q/A or &#8593;/&#8595; to control the paddle.</p>
+		<a href="index.html#" id="playButton"><blink>Play</blink></a>
+		<p>Developed By <br>Ankkit Modi<br>Paper Li</p>
+	</div>
+    <div id="game">
+		<canvas id="pongCanvas" height="480" width="798" ></canvas>
+		<audio id="collision" src="collision_8bit.ogg" preload="auto" autobuffer></audio>
+		<audio id="point" src="point_8bit.ogg" preload="auto" autobuffer></audio>
+	</div>
+	<div id="controls">
+		<a href="index.html#" id="pauseButton">&nbsp;</a>
+		<a href="index.html#" class="pull-right" id="soundButton">&nbsp;</a>
+	</div>
+	<div id="scoreboard">
+		<a href="index.html#" id="playerOneScore">0</a>
+		<a href="index.html#">-</a>
+		<a href="index.html#" id="playerTwoScore">0</a>
+	</div>
+</div>
+
+
+</article>
+</body>
+</html>
