@@ -60,6 +60,7 @@ var ball = {size:20,x:800-10,y:400-10};
 var paddle = {width:10,height:100,x:2,y:400-5};
 var canvas;
 var ctx;
+var game_interval;
 
 $(function(){
 	//init
@@ -69,51 +70,91 @@ $(function(){
 	canvas = document.getElementById("game");
 	ctx = canvas.getContext('2d');
 	
-	$('#btnStart').css('left',($(window).width()-$('#btnStart').width())/2).css('top',($(window).height()-$('#btnStart').height())/2).click(function(){
-		//connect to server and find opponent
-		socket = io.connect('http://localhost:4004');
-			socket.on("onconnected",function(data){
-			console.log('Connected successfully to the socket.io server. My server side ID is '+ data.id);
-			$('#btnStart').html("pairing...");
-			socket.on("gameStart",function(data){
-				// data = {
-				//            gid: client.gameid, 
-				//            player:0, 
-				//            opponent:client.userid
-				//        }
-				$('#btnStart').fadeOut('slow');
-				game_id = data.gid;
-				left_player = (data.player == 0)?true:false;
-				opponent_id = data.opponent;
-				init_game();
-			});
-			//setInterval(game,1000);
-		});
-		return false;
-	});
+	$('#btnStart').css('left',($(window).width()-$('#btnStart').width())/2).css('top',($(window).height()-$('#btnStart').height())/2).click(pairGame);
 });
 
-function init_game(){
-	//$(canvas).show();
-	if (left_player) {
-		right_of_server = true;
+function pairGame(){
+	//connect to server and find opponent
+	socket = io.connect('http://localhost:4004');
+		socket.on("onconnected",function(data){
+		console.log('Connected successfully to the socket.io server. My server side ID is '+ data.id);
+		$('#btnStart').html("pairing...");
+		socket.on("gameStart",function(data){
+			// data = {
+			//            gid: client.gameid, 
+			//            player:0, 
+			//            opponent:client.userid
+			//        }
+			$('#btnStart').fadeOut('slow');
+			game_id = data.gid;
+			left_player = (data.player == 0)?true:false;
+			
+			opponent_id = data.opponent;
+			init_game();
+		});
 		
+		
+	});
+	return false;
+}
+
+function init_game(){
+	if (left_player) {
+		right_of_serve = true;
+		console.log("i am left");
 		paddle.x = 2;
 		paddle.y = (canvas.height-paddle.height)/2;
 	} else {
-		right_of_server = false;
-		
+		right_of_serve = false;
+		console.log("i am right");
 		paddle.x = canvas.width - paddle.width - 2;
 		paddle.y = (canvas.height - paddle.height)/2;
 	}
 	
-	setInterval(drawGame, 10);
+	game_interval = setInterval(drawGame, 10);
+	
+	socket.on("game_interrupted",function(data){
+		//end the game
+		console.log(data.error);
+		$('#btnStart').html('START').show('fast');
+		clearInterval(game_interval);
+		//reset all
+		canvas.width = canvas.width;
+		game_id = null;
+		opponent_id = null;
+	});
+	
+	socket.on("ball_updated",function(data){
+		//receive and update ball information from server when not own the right of serve
+		
+		if (!right_of_serve){
+			ball.x = data.x;
+			ball.y = data.y;
+			console.log("ball x: "+ball.x+" y: "+ball.y);
+		}
+	});
 }
+
+var dx = 10;
 
 function drawGame(){
 
-	console.log
-	// clean up canvas
+	//update and pass ball info to server when owns the right of serve
+	if(right_of_serve){
+		console.log("i am emitting ball update event");
+		// calculate the ball position
+		//TODO
+		ball.x+=dx;
+		if (ball.x>1600){
+			dx *= -1;
+		} else if (ball.x<0){
+			dx *= -1;
+		}
+		socket.emit("ball_update",{x:ball.x,y:ball.y,size:ball.size});
+		
+	}
+
+	// clean up the canvas
 	canvas.width = canvas.width;
 	
 	// draw background
