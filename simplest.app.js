@@ -20,7 +20,7 @@ server.listen(gameport);
 console.log('\t :: Express :: Listening on port '+gameport);
 
 app.get('/',function(req,res){
-	res.sendfile(__dirname + '/index.html');
+	res.sendfile(__dirname + '/handshake.html');
 });
 
 app.get('/*',function(req,res,next){
@@ -48,7 +48,9 @@ sio.sockets.on('connection',function(client){
 	players.push(client);
 	
 	console.log('\t socket.io:: player ' + client.userid + ' connected');
-
+	
+	console.log('\t '+players.length+' players online');
+	
 	client.on('disconnect', function(){
 		console.log('\t socket.io:: client disconnected ' + client.userid);
 		if (players.indexOf(client) >= 0){
@@ -56,8 +58,9 @@ sio.sockets.on('connection',function(client){
 		}
 	});
 	
-	if (players.length%2 == 1){
+	if (players.length%2 == 0 && players.length > 0){
 		//in pair
+		console.log('\t '+players.length+' players are in pair');
 		client.gameid = UUID();
 		players[players.indexOf(client)-1].gameid = client.gameid;
 		client.emit("gameStart",{ gid: client.gameid, player:1, opponent:players[players.indexOf(client)-1].userid });
